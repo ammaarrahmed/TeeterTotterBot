@@ -1,0 +1,40 @@
+# ========================
+# PlatformIO (ESP32)
+# ========================
+.pio/
+.vscode/
+*.code-workspace
+
+# ========================
+# STM32CubeIDE / Keil / GCC
+# ========================
+Debug/
+Release/
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.log
+*.su
+*.crf
+*.axf
+*.htm
+*.lnp
+*.dep
+
+# ========================
+# OS & Editor junk
+# ========================
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+
+# ========================
+# Project-specific
+# ========================
+*.pdf
