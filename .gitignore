@@ -38,3 +38,8 @@ Thumbs.db
 # Project-specific
 # ========================
 *.pdf
+
+# PlatformIO boilerplate READMEs
+esp32_microros_bridge/include/README
+esp32_microros_bridge/lib/README
+esp32_microros_bridge/test/README
