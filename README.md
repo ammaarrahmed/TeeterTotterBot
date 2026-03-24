@@ -3,7 +3,10 @@
 Small self-balancing robot with an STM32 doing the fast control loop and an ESP32 doing the Wi-Fi and micro-ROS side.
 
 It is still a bench project and still needs tuning, but the repo is in a usable state now.
-![WhatsApp Image 2026-03-24 at 1 17 33 AM](https://github.com/user-attachments/assets/591021f5-044b-4124-ab3c-decb31dfa221)
+
+
+![Add a subheading](https://github.com/user-attachments/assets/60800779-b5d1-4b08-9b91-76acac21fbde)
+
 
 ## Parts Used
 
