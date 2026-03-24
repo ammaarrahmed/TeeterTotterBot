@@ -1,311 +1,159 @@
-<p align="center">
-  <h1 align="center">🤖 TeeterTotter Bot</h1>
-  <p align="center">
-    <strong>A dual-processor, ROS 2-enabled self-balancing robot</strong><br/>
-    <em>Demonstrating real-time control, systems architecture, and embedded protocol design</em>
-  </p>
-  <p align="center">
-    <img src="https://img.shields.io/badge/platform-STM32F401-blue?style=flat-square&logo=stmicroelectronics" alt="STM32"/>
-    <img src="https://img.shields.io/badge/platform-ESP32-green?style=flat-square&logo=espressif" alt="ESP32"/>
-    <img src="https://img.shields.io/badge/ROS_2-Humble-orange?style=flat-square&logo=ros" alt="ROS 2"/>
-    <img src="https://img.shields.io/badge/RTOS-FreeRTOS-red?style=flat-square" alt="FreeRTOS"/>
-    <img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" alt="License"/>
-  </p>
-</p>
+# TeeterTotter Bot
 
----
+Small self-balancing robot with an STM32 doing the fast control loop and an ESP32 doing the Wi-Fi and micro-ROS side.
 
-## Table of Contents
+It is still a bench project and still needs tuning, but the repo is in a usable state now.
 
-- [Overview](#overview)
-- [System Architecture](#system-architecture)
-- [Key Features](#key-features)
-- [Hardware BOM](#hardware-bill-of-materials)
-- [Repository Structure](#repository-structure)
-- [Communication Protocol](#communication-protocol)
-- [Getting Started](#getting-started)
-- [Safety Features](#safety-features)
-- [Contributing](#contributing)
-- [License](#license)
+## Parts Used
 
----
+- STM32F401 Black Pill
+- ESP32 dev board
+- MPU6050
+- L298N
+- 2 N20 motors
+- 2x 18650 cells
+- XL4015 buck converter
+- ST-Link V2
 
-## Overview
+## Wiring
 
-TeeterTotter Bot is a **two-wheeled self-balancing robot** built on a **heterogeneous dual-MCU architecture**. A dedicated **STM32F401** runs the deterministic inner control loop (PID + motor drive) at up to 1 kHz, while an **ESP32** acts as a wireless bridge, exposing the robot to the **ROS 2** ecosystem via [micro-ROS](https://micro.ros.org/).
+STM32 to MPU6050:
 
-This separation mirrors how industrial robots are designed — isolating safety-critical real-time control from non-deterministic networking — and allows higher-level features (SLAM, teleoperation, visualization) to be developed independently on a PC or Raspberry Pi.
+- PB6 -> SCL
+- PB7 -> SDA
+- GND -> GND
+- 3.3V -> VCC
+- GND -> ADD
+- XDA, XCL, INT not used right now
 
-```
- ┌──────────────────────────────────────────────────────────────────┐
- │                     APPLICATION  LAYER                          │
- │           PC / Raspberry Pi  (ROS 2 Humble)                     │
- │  ┌────────────┐  ┌────────────┐  ┌──────────────────────┐       │
- │  │  Teleop    │  │   RViz2    │  │  micro-ros-agent     │       │
- │  │  Node      │  │  Visualizer│  │  (UDP Bridge)        │       │
- │  └─────┬──────┘  └─────┬──────┘  └──────────┬───────────┘       │
- │        └───────────────┼───────────────────┘                    │
- └────────────────────────┼────────────────────────────────────────┘
-                          │  Wi-Fi / UDP
- ┌────────────────────────┼────────────────────────────────────────┐
- │                   BRIDGE  LAYER                                 │
- │                      ESP32                                      │
- │  ┌────────────────┐  ┌──────────────────────────────────┐       │
- │  │ micro-ROS      │  │  UART Bridge                     │       │
- │  │ Client         │  │  (Binary Protocol)               │       │
- │  │ /cmd_vel sub   │  │  TX: ControlPacket               │       │
- │  │ /diag pub      │  │  RX: TelemetryPacket             │       │
- │  └────────┬───────┘  └──────────────┬───────────────────┘       │
- │           └──────────────┬──────────┘                           │
- └──────────────────────────┼──────────────────────────────────────┘
-                            │  UART + DMA
- ┌──────────────────────────┼──────────────────────────────────────┐
- │                   ACTUATION  LAYER                              │
- │                     STM32F401                                   │
- │  ┌─────────┐  ┌──────────┐  ┌─────────┐  ┌──────────────────┐  │
- │  │  IMU    │  │   PID    │  │  Motor  │  │  Safety Watchdog │  │
- │  │ MPU6050 │→ │ Balance  │→ │  Driver │  │  (Deadman Switch)│  │
- │  │ (I²C)   │  │ @1 kHz   │  │  (PWM)  │  │  500 ms timeout  │  │
- │  └─────────┘  └──────────┘  └─────────┘  └──────────────────┘  │
- └─────────────────────────────────────────────────────────────────┘
-```
+STM32 to ESP32 UART:
 
----
+- PA9 -> ESP32 GPIO16
+- PA10 -> ESP32 GPIO17
+- GND -> GND
 
-## System Architecture
+STM32 to L298N:
 
-```mermaid
-flowchart LR
-    subgraph PC ["☁️ PC / Raspberry Pi"]
-        Teleop["Teleop Node"]
-        RViz["RViz2"]
-        Agent["micro-ros-agent"]
-    end
+- PB0 -> ENA
+- PB1 -> ENB
+- PB12 -> IN1
+- PB13 -> IN2
+- PB14 -> IN3
+- PB15 -> IN4
 
-    subgraph ESP32 ["📡 ESP32 — Bridge Layer"]
-        uROS["micro-ROS Client"]
-        UART_TX["UART TX\n(ControlPacket)"]
-        UART_RX["UART RX\n(TelemetryPacket)"]
-    end
+Power idea used here:
 
-    subgraph STM32 ["⚙️ STM32F401 — Actuation Layer"]
-        IMU["MPU6050\nIMU"]
-        PID["PID Controller\n@1 kHz"]
-        Motors["H-Bridge\nMotor Driver"]
-        Watchdog["Deadman\nSwitch"]
-        Encoders["Quadrature\nEncoders"]
-    end
+- battery -> L298N motor input
+- battery -> XL4015 input
+- XL4015 5V output -> STM32 and ESP32 power
+- all grounds common
 
-    Teleop -- "/cmd_vel" --> Agent
-    Agent -- "Wi-Fi / UDP" --> uROS
-    uROS --> UART_TX
-    UART_TX -- "Binary Frame\n0xAA 0x55" --> PID
-    IMU --> PID
-    Encoders --> PID
-    PID --> Motors
-    PID --> Watchdog
-    PID -- "Telemetry\n0xAA 0xEE" --> UART_RX
-    UART_RX --> uROS
-    uROS -- "/diagnostics\n/imu/data" --> Agent
-    Agent --> RViz
-```
+## Things To Change In Code
 
----
+ESP32 config is in `esp32_microros_bridge/include/config.h`.
 
-## Key Features
+Change these before flashing:
 
-| Domain | Feature | Detail |
-|--------|---------|--------|
-| **Real-Time Control** | Deterministic PID loop | FreeRTOS task on STM32F401 Cortex-M4 @ up to 1 kHz |
-| **Hardware Acceleration** | FPU-accelerated math | Hard-float compiler flags leverage the M4's hardware FPU |
-| **DMA Transfers** | Zero-copy UART | DMA handles byte transfer so the CPU stays on PID math |
-| **Wireless ROS 2** | micro-ROS over Wi-Fi | ESP32 dual-core: Core 0 for Wi-Fi/ROS, Core 1 for UART |
-| **Binary Protocol** | Custom packed frames | `#pragma pack(1)` structs with start-byte framing & XOR checksum |
-| **Fault Tolerance** | Deadman's switch | Motors ramp to zero if no valid packet received within 500 ms |
-| **Safety Cutoff** | Tilt watchdog | Automatic motor kill if pitch exceeds ±45° |
-| **Modularity** | Shared protocol header | `robot_protocol.h` is compiled on both architectures |
+- `ROBOT_WIFI_SSID`
+- `ROBOT_WIFI_PASSWORD`
+- `ROBOT_AGENT_IP`
+- `ROBOT_AGENT_PORT`
+- `ROBOT_UART_RX_PIN`
+- `ROBOT_UART_TX_PIN`
+- topic names if you want different ones
 
----
+STM32 tuning stuff is in `stm32_balance_controller/Core/Inc/main.h`.
 
-## Hardware Bill of Materials
+Things you may end up changing there:
 
-| Component | Part | Role |
-|-----------|------|------|
-| **Real-Time MCU** | STM32F401 (Black Pill) | PID balance loop, motor control, IMU reading |
-| **Wireless MCU** | ESP32-WROOM-32 | micro-ROS client, Wi-Fi bridge, telemetry relay |
-| **IMU** | MPU6050 _or_ BMI160 | 6-axis accelerometer + gyroscope for tilt sensing |
-| **Motor Driver** | L298N _or_ DRV8833 | Dual H-bridge for bidirectional DC motor control |
-| **Motors** | N20 geared DC motors × 2 | Drive wheels with quadrature encoders |
-| **Power** | 2S LiPo (7.4 V) | Battery pack with voltage divider for monitoring |
-| **Level Shifter** | 3.3 V ↔ 3.3 V (or 5 V) | UART level matching between MCUs |
-| **Chassis** | 3D-printed / laser-cut | Custom frame for the two-wheeled platform |
+- PID gains
+- pitch trim
+- IMU axis/sign settings
+- motor limits
+- timeout values
 
----
+## PC Commands
 
-## Repository Structure
+Use 2 terminals.
 
-```
-TeeterTotterBot/
-│
-├── esp32_microros_bridge/            ← PlatformIO project (ESP32)
-│   ├── include/
-│   │   ├── robot_protocol.h          ← Shared packet definitions
-│   │   └── config.h                  ← Wi-Fi credentials & pin map
-│   ├── src/
-│   │   ├── main.cpp                  ← Entry point & FreeRTOS task setup
-│   │   ├── ros_manager.cpp           ← micro-ROS publishers / subscribers
-│   │   └── uart_bridge.cpp           ← STM32 serial communication logic
-│   ├── lib/
-│   │   └── micro_ros_arduino/        ← micro-ROS precompiled library
-│   ├── test/                         ← Unit tests for checksum logic
-│   └── platformio.ini                ← Build flags & library deps
-│
-├── stm32_balance_controller/         ← STM32CubeIDE project (STM32F401)
-│   ├── Core/
-│   │   ├── Inc/
-│   │   │   ├── main.h                ← Peripheral & clock config
-│   │   │   ├── pid_controller.h      ← PID algorithm interface
-│   │   │   ├── robot_protocol.h      ← Shared packet definitions (same file)
-│   │   │   └── freertos_tasks.h      ← RTOS task declarations
-│   │   └── Src/
-│   │       ├── main.c                ← Hardware init (clocks, GPIO, DMA)
-│   │       ├── freertos.c            ← FreeRTOS task implementations
-│   │       ├── pid_controller.c      ← PID compute logic
-│   │       └── stm32f4xx_it.c        ← Interrupt handlers (DMA, Timer)
-│   ├── Drivers/                      ← STM32 HAL libraries
-│   ├── Middlewares/
-│   │   └── Third_Party/FreeRTOS/     ← FreeRTOS kernel source
-│   └── STM32F401CCUx_FLASH.ld        ← Linker script (memory map)
-│
-├── .gitignore
-└── README.md                         ← You are here
-```
-
----
-
-## Communication Protocol
-
-Both MCUs share a common `robot_protocol.h` header defining packed binary frames. This ensures identical memory layout across ARM Cortex-M4 (STM32) and Xtensa (ESP32) architectures.
-
-### Command Packet — ESP32 → STM32
-
-Sent at **20–50 Hz** to update the balance controller's velocity setpoints.
-
-| Offset | Size | Field | Value / Range |
-|--------|------|-------|---------------|
-| 0 | 1 B | `start_byte1` | `0xAA` |
-| 1 | 1 B | `start_byte2` | `0x55` |
-| 2 | 4 B | `target_linear` | float — m/s |
-| 6 | 4 B | `target_angular` | float — rad/s |
-| 10 | 1 B | `checksum` | XOR of bytes 0–9 |
-
-**Total: 11 bytes**
-
-### Telemetry Packet — STM32 → ESP32
-
-Sent at **50–100 Hz** to report robot state back to ROS 2.
-
-| Offset | Size | Field | Value / Range |
-|--------|------|-------|---------------|
-| 0 | 1 B | `start_byte1` | `0xAA` |
-| 1 | 1 B | `start_byte2` | `0xEE` |
-| 2 | 4 B | `current_pitch` | float — radians |
-| 6 | 4 B | `battery_v` | float — volts |
-| 10 | 4 B | `left_encoder` | int32 — ticks |
-| 14 | 4 B | `right_encoder` | int32 — ticks |
-| 18 | 1 B | `checksum` | XOR of bytes 0–17 |
-
-**Total: 19 bytes**
-
-### Checksum Algorithm
-
-```c
-uint8_t calculate_checksum(uint8_t *data, size_t len) {
-    uint8_t crc = 0;
-    for (size_t i = 0; i < len; i++) {
-        crc ^= data[i];
-    }
-    return crc;
-}
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-| Tool | Purpose | Install |
-|------|---------|---------|
-| [PlatformIO CLI](https://platformio.org/) | Build & flash ESP32 firmware | `pip install platformio` |
-| [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html) | Build & flash STM32 firmware | ST website |
-| [ROS 2 Humble](https://docs.ros.org/en/humble/) | Application layer | [Install guide](https://docs.ros.org/en/humble/Installation.html) |
-| [micro-ros-agent](https://github.com/micro-ROS/micro-ROS-Agent) | UDP ↔ DDS bridge | `ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888` |
-
-### 1. Build & Flash the ESP32
+Terminal 1, micro-ROS agent:
 
 ```bash
-cd esp32_microros_bridge
-
-# Edit Wi-Fi credentials
-nano include/config.h
-
-# Build and upload
-pio run --target upload
-
-# Monitor serial output
-pio device monitor
+source /opt/ros/jazzy/setup.bash
+source ~/uros_host_ws/install/local_setup.bash
+ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888 -v6
 ```
 
-### 2. Build & Flash the STM32
-
-1. Open `stm32_balance_controller/` in **STM32CubeIDE**
-2. Ensure compiler flags include `-mfloat-abi=hard -mfpu=fpv4-sp-d16`
-3. Build the project → flash via ST-Link or USB DFU
-
-### 3. Launch ROS 2 Agent
+Terminal 2, ROS commands:
 
 ```bash
-# Terminal 1 — Start the micro-ROS agent
-ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888
-
-# Terminal 2 — Send velocity commands
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
-  "{linear: {x: 0.1}, angular: {z: 0.0}}"
-
-# Terminal 3 — Monitor telemetry
-ros2 topic echo /diagnostics
+source /opt/ros/jazzy/setup.bash
+ros2 topic list
 ```
 
----
+If you want an ESP32 serial monitor too, run it in another terminal from `esp32_microros_bridge` with `pio device monitor`.
 
-## Safety Features
+## Useful ROS Commands
 
-| Feature | Trigger | Action |
-|---------|---------|--------|
-| **Deadman's Switch** | No valid packet received for > 500 ms | Ramp motors to zero |
-| **Tilt Cutoff** | Pitch exceeds ±45° | Immediate motor kill |
-| **Watchdog Timer** | MCU hangs or crashes | Hardware reset via IWDG |
-| **Packet Validation** | Start bytes or checksum mismatch | Packet silently dropped |
+List topics:
 
----
+```bash
+ros2 topic list
+```
 
-## Contributing
+Echo IMU:
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/kalman-filter`)
-3. Commit your changes (`git commit -m "feat: add Kalman filter for IMU fusion"`)
-4. Push to the branch (`git push origin feature/kalman-filter`)
-5. Open a Pull Request
+```bash
+ros2 topic echo /imu/data
+```
 
----
+Echo status:
 
-## License
+```bash
+ros2 topic echo /robot_status
+```
 
-This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
+Echo battery:
 
----
+```bash
+ros2 topic echo /battery_voltage
+```
 
-<p align="center">
-  <sub>Built with ❤️ for robotics — designed to demonstrate <strong>systems engineering</strong>, <strong>real-time control</strong>, and <strong>distributed embedded architecture</strong>.</sub>
-</p>
+Echo motor commands:
+
+```bash
+ros2 topic echo /left_motor_command
+ros2 topic echo /right_motor_command
+```
+
+Small forward command:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.02}, angular: {z: 0.0}}" -r 10
+```
+
+Small reverse command:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: -0.02}, angular: {z: 0.0}}" -r 10
+```
+
+Small turn command:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0}, angular: {z: 0.2}}" -r 10
+```
+
+Stop command:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0}, angular: {z: 0.0}}" -r 10
+```
+
+## Notes
+
+First tests should be with wheels off the ground.
+
+If it moves the wrong way, do not keep increasing gains. Fix sign, wiring, or IMU orientation first.
+
+That is basically it for now.

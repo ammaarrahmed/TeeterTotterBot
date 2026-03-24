@@ -38,6 +38,8 @@ Thumbs.db
 # Project-specific
 # ========================
 *.pdf
+software_setup/
+wiring/
 
 # PlatformIO boilerplate READMEs
 esp32_microros_bridge/include/README
